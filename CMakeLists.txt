@@ -88,7 +88,7 @@ configure_file(
 )
 
 add_executable(OpenGLStarter
-  src/Assignment2_67051052.cpp
+  src/Assignment2_67050592_67051052.cpp
   src/Libs/Mesh.cpp
   src/Libs/Shader.cpp
   src/Libs/Window.cpp
