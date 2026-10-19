@@ -1,5 +1,5 @@
 #version 330 core
-// Shadow pass: เรนเดอร์ความลึกของฉากจากมุมมองแสงจันทร์
+// เรนเดอร์ความลึกของฉากจากมุมมองแสงจันทร์
 layout (location = 0) in vec3 aPos;
 uniform mat4 lightSpace;
 uniform mat4 model;

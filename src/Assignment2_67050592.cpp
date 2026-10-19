@@ -1,25 +1,3 @@
-// =====================================================================================
-//  Assignment 2 : "FUTURE ME"
-//  ภาพ: โปรแกรมเมอร์นั่งรอโปรแกรมรันนานมาก ... จนกลายเป็นโครงกระดูก แล้วสุดท้ายก็ขึ้น ERROR
-//
-//  - ทุกชิ้นในฉากสร้างจาก vertices ด้วยโค้ด (box / sphere / tube / lathe) ไม่ใช้ไฟล์โมเดลภายนอก
-//  - Texture ทั้งหมด (ไม้, พื้น, ผนัง, หน้าจอ error, ปฏิทิน, โปสเตอร์ ...) สร้างด้วยโค้ดเช่นกัน
-//  - Modern OpenGL 3.3 core + Lighting model แบบ Blinn-Phong
-//        * แสงจันทร์ (directional) ลอดหน้าต่าง พร้อม shadow mapping
-//        * แสงสีแดงจากหน้าจอที่ขึ้น error (point light), ไฟ LED เคสคอม
-//        * ambient แบบ hemisphere, emissive, tone mapping, vignette
-//  - เรนเดอร์ภาพขนาด 800 x 600 (MSAA 4x)
-//
-//  ปุ่มควบคุม
-//     P              : บันทึกภาพ 800x600 เป็น PNG (ชื่อไฟล์ตั้งได้ที่ SCREENSHOT_NAME)
-//     คลิกขวาค้าง + ลากเมาส์ : หมุนมุมกล้อง
-//     W A S D / Q E  : เลื่อนกล้อง (หน้า/หลัง/ซ้าย/ขวา/ลง/ขึ้น)
-//     R              : กลับไปมุมกล้องหลักของภาพ
-//     ESC            : ออกจากโปรแกรม
-//
-//  ไฟล์ shader ที่ใช้ (อยู่ในโฟลเดอร์ Shaders/)
-//     futureme_scene.vert, futureme_scene.frag, futureme_shadow.vert, futureme_shadow.frag
-// =====================================================================================
 #define _CRT_SECURE_NO_WARNINGS
 #define NOMINMAX
 #undef GLFW_DLL
@@ -54,23 +32,16 @@ using glm::vec2;
 using glm::vec3;
 using glm::vec4;
 
-// ------------------------------------------------------------------------------------
-//  Settings
-// ------------------------------------------------------------------------------------
 const GLint WIDTH  = 800;
 const GLint HEIGHT = 600;
 const int   SHADOW_SIZE = 2048;
 const float PI = 3.14159265358979f;
 
-// เปลี่ยนชื่อไฟล์ภาพตามรหัสนักศึกษา เช่น "Assignment2_67050001_67050002.png"
-const char* SCREENSHOT_NAME = "Assignment2_67051052_yourPairID.png";
+const char* SCREENSHOT_NAME = "Assignment2_67050592.png";
 
 const std::filesystem::path shaderDirectory =
     std::filesystem::u8path(OPENGL_STARTER_SHADER_DIR);
 
-// ------------------------------------------------------------------------------------
-//  Math helpers
-// ------------------------------------------------------------------------------------
 static const vec3 X_AXIS(1.0f, 0.0f, 0.0f);
 static const vec3 Y_AXIS(0.0f, 1.0f, 0.0f);
 static const vec3 Z_AXIS(0.0f, 0.0f, 1.0f);
@@ -88,10 +59,6 @@ static vec3 safeNormalize(const vec3& v)
 }
 static vec3 lerp3(const vec3& a, const vec3& b, float t) { return a + (b - a) * t; }
 
-// ------------------------------------------------------------------------------------
-//  MeshBuilder : รวม primitive หลายๆ ชิ้น (ที่ใช้วัสดุเดียวกัน) ให้เป็น Mesh เดียว
-//  ทุกฟังก์ชันสร้าง vertex (position, normal, uv) เองทั้งหมด
-// ------------------------------------------------------------------------------------
 static VertexPNU MakeVertex(const vec3& p, const vec3& n, const vec2& uv)
 {
     VertexPNU v;
@@ -107,8 +74,6 @@ struct MeshBuilder
     std::vector<unsigned int> idx;
 
     unsigned int Base() const { return static_cast<unsigned int>(verts.size()); }
-
-    // กล่องขนาด 1x1x1 (กึ่งกลางที่ origin) แล้วแปลงด้วย M
     void Box(const mat4& M)
     {
         const mat3 NM = glm::transpose(glm::inverse(mat3(M)));
@@ -117,8 +82,8 @@ struct MeshBuilder
         {
             vec3 N = normals[f];
             vec3 U = (std::fabs(N.y) > 0.5f) ? vec3(0.0f, 0.0f, -1.0f) : vec3(0.0f, 1.0f, 0.0f);
-            vec3 A = glm::cross(U, N);      // แกน u ของหน้า
-            vec3 B = glm::cross(N, A);      // แกน v ของหน้า
+            vec3 A = glm::cross(U, N); // แกน u ของหน้า
+            vec3 B = glm::cross(N, A); // แกน v ของหน้า
             vec3 C = N * 0.5f;
             unsigned int b = Base();
             vec3 wn = safeNormalize(NM * N);
@@ -155,7 +120,6 @@ struct MeshBuilder
             }
     }
 
-    // ท่อไปตามเส้นทาง pts (รัศมีแต่ละจุดตาม radii) ใช้ parallel-transport frame
     void Tube(const std::vector<vec3>& pts, const std::vector<float>& radii, int slices = 10, bool caps = true)
     {
         const size_t n = pts.size();
@@ -227,7 +191,7 @@ struct MeshBuilder
         Tube({ a, b }, { ra, rb }, slices, caps);
     }
 
-    // พื้นผิวหมุนรอบแกน y (lathe) : profile = (รัศมี, ความสูง) จากล่างขึ้นบน
+    // พื้นผิวหมุนรอบแกน y
     void Lathe(const std::vector<vec2>& profile, const mat4& M, int slices = 32)
     {
         const mat3 NM = glm::transpose(glm::inverse(mat3(M)));
@@ -241,7 +205,7 @@ struct MeshBuilder
             vec2 pa = profile[i > 0 ? i - 1 : 0];
             vec2 pc = profile[i + 1 < n ? i + 1 : n - 1];
             vec2 t = pc - pa;
-            vec2 n2 = glm::normalize(vec2(t.y, -t.x));     // normal ชี้ออกด้านนอก
+            vec2 n2 = glm::normalize(vec2(t.y, -t.x)); // normal ชี้ออกด้านนอก
             for (int j = 0; j <= slices; ++j)
             {
                 float th = 2.0f * PI * j / slices;
@@ -282,9 +246,7 @@ struct MeshBuilder
     }
 };
 
-// ------------------------------------------------------------------------------------
 //  Procedural noise (ใช้ทำลายไม้ พื้น ผนัง)
-// ------------------------------------------------------------------------------------
 static float Hash2(int x, int y, int seed)
 {
     uint32_t h = (uint32_t)x * 374761393u + (uint32_t)y * 668265263u + (uint32_t)seed * 2246822519u;
@@ -306,7 +268,7 @@ static float ValueNoise(float x, float y, int seed, int period)
     return glm::mix(glm::mix(a, b, ux), glm::mix(c, d, ux), uy);
 }
 
-// fractal noise ที่ต่อกันได้ไร้รอยต่อ (tileable) : u,v อยู่ในช่วง 0..1
+// fractal noise
 static float Fbm(float u, float v, int seed, int period, int octaves = 5)
 {
     float sum = 0.0f, amp = 0.5f, norm = 0.0f;
@@ -321,9 +283,7 @@ static float Fbm(float u, float v, int seed, int period, int octaves = 5)
     return sum / norm;
 }
 
-// ------------------------------------------------------------------------------------
-//  Bitmap font 5x7 (ออกแบบเอง) สำหรับเขียนตัวอักษรลง texture
-// ------------------------------------------------------------------------------------
+//  Bitmap font 5x7 สำหรับเขียนตัวอักษรลง texture
 struct Glyph { char c; const char* rows; };
 static const Glyph FONT[] = {
     {'A', ".###." "#...#" "#...#" "#####" "#...#" "#...#" "#...#"},
@@ -385,7 +345,7 @@ static const Glyph FONT[] = {
     {'\'',"..#.." "..#.." ".#..." "....." "....." "....." "....."},
     {'"', ".#.#." ".#.#." ".#.#." "....." "....." "....." "....."},
     {'|', "..#.." "..#.." "..#.." "..#.." "..#.." "..#.." "..#.."},
-    {'@', "#####" "#####" "#####" "#####" "#####" "#####" "#####"},   // '@' = บล็อกทึบ (ใช้ทำ progress bar)
+    {'@', "#####" "#####" "#####" "#####" "#####" "#####" "#####"}, // '@' ใช้ทำ progress bar
 };
 
 static const char* FindGlyph(char c)
@@ -396,13 +356,10 @@ static const char* FindGlyph(char c)
     return nullptr;
 }
 
-// ------------------------------------------------------------------------------------
-//  Canvas : วาดรูป 2D ลง buffer แล้วอัปโหลดเป็น texture
-// ------------------------------------------------------------------------------------
 struct Canvas
 {
     int w, h;
-    std::vector<float> px;   // RGBA 0..1 (แถว 0 = ด้านบนของภาพ)
+    std::vector<float> px;
 
     Canvas(int width, int height, const vec3& c, float a = 1.0f) : w(width), h(height), px(width * height * 4)
     {
@@ -478,7 +435,7 @@ struct Canvas
     GLuint Upload(bool repeat = true) const
     {
         std::vector<unsigned char> data(w * h * 4);
-        for (int y = 0; y < h; ++y)              // พลิกแนวตั้ง: OpenGL เริ่มแถวล่างสุด
+        for (int y = 0; y < h; ++y)   
             for (int x = 0; x < w * 4; ++x)
                 data[(y * w * 4) + x] = (unsigned char)(glm::clamp(px[((h - 1 - y) * w * 4) + x], 0.0f, 1.0f) * 255.0f + 0.5f);
         GLuint tex = 0;
@@ -496,16 +453,14 @@ struct Canvas
     }
 };
 
-// ------------------------------------------------------------------------------------
 //  Procedural textures
-// ------------------------------------------------------------------------------------
 struct Textures
 {
     GLuint white = 0, wood = 0, floor = 0, wall = 0, fabric = 0, screen = 0, calendar = 0,
            poster = 0, sticky1 = 0, sticky2 = 0, clock = 0, can = 0, paper = 0;
 } gTex;
 
-static GLuint MakeWoodTexture()          // ลายไม้โต๊ะ (เสี้ยนไม้วิ่งตามแกน u)
+static GLuint MakeWoodTexture() // ลายไม้โต๊ะ
 {
     Canvas c(512, 256, vec3(0));
     for (int y = 0; y < c.h; ++y)
@@ -524,7 +479,7 @@ static GLuint MakeWoodTexture()          // ลายไม้โต๊ะ (เ�
     return c.Upload();
 }
 
-static GLuint MakeFloorTexture()         // พื้นไม้ลามิเนตเก่าๆ มีฝุ่น
+static GLuint MakeFloorTexture() // พื้นไม้ลามิเนตเก่าๆ มีฝุ่น
 {
     Canvas c(512, 512, vec3(0));
     const int plankH = 64, plankL = 256;
@@ -543,14 +498,14 @@ static GLuint MakeFloorTexture()         // พื้นไม้ลามิเ
             vec3 col = glm::mix(vec3(0.36f, 0.25f, 0.17f), vec3(0.24f, 0.16f, 0.10f), grain * 0.6f + fine * 0.4f) * tint;
             float dust = Fbm(u, v, 99, 4);
             col = glm::mix(col, vec3(0.42f, 0.40f, 0.37f), glm::clamp((dust - 0.45f) * 1.2f, 0.0f, 0.35f));
-            if (y % plankH < 2 || xx % plankL < 2) col *= 0.35f;    // ร่องระหว่างแผ่นไม้
+            if (y % plankH < 2 || xx % plankL < 2) col *= 0.35f; // ร่องระหว่างแผ่นไม้
             c.Set(x, y, col);
         }
     }
     return c.Upload();
 }
 
-static GLuint MakeWallTexture()          // ผนังวอลเปเปอร์ลายทางซีดๆ มีคราบ
+static GLuint MakeWallTexture() // ผนังวอลเปเปอร์ลายทางซีดๆ มีคราบ
 {
     Canvas c(256, 256, vec3(0));
     for (int y = 0; y < c.h; ++y)
@@ -568,7 +523,7 @@ static GLuint MakeWallTexture()          // ผนังวอลเปเปอ
     return c.Upload();
 }
 
-static GLuint MakeFabricTexture()        // ผ้าเก้าอี้สำนักงาน
+static GLuint MakeFabricTexture() // ผ้าเก้าอี้
 {
     Canvas c(128, 128, vec3(0));
     for (int y = 0; y < c.h; ++y)
@@ -590,9 +545,9 @@ static GLuint MakePaperTexture()
     return c.Upload();
 }
 
-// ---------------- หน้าจอคอมพิวเตอร์ที่ขึ้น ERROR ----------------
+// -หน้าจอคอมพิวเตอร์
 const int SCREEN_TEX_W = 768, SCREEN_TEX_H = 432;
-static int gPromptEndX = 0, gPromptY = 0;   // ตำแหน่ง cursor กะพริบ (หน่วย pixel ของ texture)
+static int gPromptEndX = 0, gPromptY = 0; // ตำแหน่ง cursor
 
 static GLuint MakeScreenTexture()
 {
@@ -606,9 +561,9 @@ static GLuint MakeScreenTexture()
 
     // หน้าต่าง error
     const int x0 = 70, y0 = 116, x1 = 698, y1 = 388;
-    c.Rect(x0 + 10, y0 + 10, x1 + 10, y1 + 10, vec3(0.0f), 0.6f);             // เงา
-    c.Rect(x0, y0, x1, y1, vec3(0.30f, 0.03f, 0.04f));                           // ตัวหน้าต่าง
-    c.Rect(x0, y0, x1, y0 + 40, red);                                            // title bar
+    c.Rect(x0 + 10, y0 + 10, x1 + 10, y1 + 10, vec3(0.0f), 0.6f); // เงา
+    c.Rect(x0, y0, x1, y1, vec3(0.30f, 0.03f, 0.04f)); // ตัวหน้าต่าง
+    c.Rect(x0, y0, x1, y0 + 40, red); // title bar
     c.Text(x0 + 14, y0 + 10, "FATAL ERROR", 3, white);
     c.Rect(x1 - 40, y0 + 6, x1 - 8, y0 + 34, vec3(0.6f, 0.05f, 0.05f));
     c.Text(x1 - 32, y0 + 10, "X", 3, white);
@@ -641,19 +596,19 @@ static GLuint MakeScreenTexture()
     return c.Upload(false);
 }
 
-static GLuint MakeCalendarTexture()      // ปฏิทินปี 2086 ที่ถูกขีดฆ่าทุกวัน
+static GLuint MakeCalendarTexture() // ปฏิทิน
 {
     Canvas c(256, 340, vec3(0.92f, 0.90f, 0.84f));
     const vec3 red(0.80f, 0.10f, 0.10f), ink(0.15f, 0.15f, 0.18f);
     c.Rect(0, 0, 256, 78, red);
     c.TextCentered(128, 12, "OCTOBER", 4, vec3(1.0f));
     c.TextCentered(128, 48, "2086", 3, vec3(1.0f));
-    for (int i = 0; i < 8; ++i) c.Disc(24.0f + i * 30.0f, 6.0f, 4.0f, vec3(0.2f));   // ห่วงปฏิทิน
+    for (int i = 0; i < 8; ++i) c.Disc(24.0f + i * 30.0f, 6.0f, 4.0f, vec3(0.2f)); // ห่วงปฏิทิน
     const char* days = "SMTWTFS";
     for (int d = 0; d < 7; ++d) c.Text(14 + d * 34, 90, std::string(1, days[d]), 2, ink);
     for (int day = 1; day <= 31; ++day)
     {
-        int slot = day + 3;                       // วันที่ 1 เริ่มวันพฤหัส
+        int slot = day + 3; // วันที่ 1 ในปฏิทิน
         int col = slot % 7, row = slot / 7;
         int x = 10 + col * 34, y = 114 + row * 42;
         c.Text(x, y, std::to_string(day), 2, ink);
@@ -663,7 +618,7 @@ static GLuint MakeCalendarTexture()      // ปฏิทินปี 2086 ที
     return c.Upload(false);
 }
 
-static GLuint MakePosterTexture()        // โปสเตอร์ธีม FUTURE ME
+static GLuint MakePosterTexture() // โปสเตอร์
 {
     Canvas c(240, 340, vec3(0.06f, 0.07f, 0.12f));
     const vec3 yellow(1.0f, 0.82f, 0.25f);
@@ -699,7 +654,7 @@ static GLuint MakeStickyTexture(const vec3& paper, const std::vector<std::string
     return c.Upload(false);
 }
 
-static GLuint MakeClockTexture()         // หน้าปัดนาฬิกา (นอกวงกลมโปร่งใส)
+static GLuint MakeClockTexture() // หน้าปัดนาฬิกา
 {
     Canvas c(256, 256, vec3(0.0f), 0.0f);
     c.Disc(128.0f, 128.0f, 126.0f, vec3(0.93f, 0.91f, 0.85f));
@@ -717,7 +672,7 @@ static GLuint MakeClockTexture()         // หน้าปัดนาฬิก
     return c.Upload(false);
 }
 
-static GLuint MakeCanTexture()           // กระป๋องเครื่องดื่มชูกำลัง
+static GLuint MakeCanTexture() // กระป๋องเครื่องดื่มชูกำลัง
 {
     Canvas c(256, 128, vec3(0.08f, 0.32f, 0.12f));
     c.Rect(0, 0, 256, 14, vec3(0.75f));
@@ -734,9 +689,7 @@ static GLuint MakeWhiteTexture()
     return c.Upload();
 }
 
-// ------------------------------------------------------------------------------------
 //  Scene description : Material + DrawItem
-// ------------------------------------------------------------------------------------
 struct Material
 {
     vec3   albedo = vec3(1.0f);
@@ -795,9 +748,7 @@ struct SceneInfo
     vec3 skullCentre, rShoulder, rElbow, lElbow, rKnee, lKnee, armrestR, mug;
 } gScene;
 
-// ------------------------------------------------------------------------------------
 //  ห้อง
-// ------------------------------------------------------------------------------------
 const float ROOM_X0 = -2.0f, ROOM_X1 = 2.4f, ROOM_Z0 = -1.7f, ROOM_Z1 = 3.0f, ROOM_H = 2.7f;
 const float WIN_Z0 = -0.35f, WIN_Z1 = 1.05f, WIN_Y0 = 1.0f, WIN_Y1 = 2.2f;
 
@@ -811,12 +762,12 @@ static void BuildRoom()
 
     // ผนัง
     Material wallM = Mat(vec3(1.0f), 0.03f, 8.0f, gTex.wall, vec2(3.5f, 2.2f));
-    Add(gCube, T(vec3(cx, ROOM_H * 0.5f, ROOM_Z0 - 0.05f)) * S(vec3(sx, ROOM_H, 0.1f)), wallM);   // หลัง
-    Add(gCube, T(vec3(ROOM_X0 - 0.05f, ROOM_H * 0.5f, cz)) * S(vec3(0.1f, ROOM_H, sz)), wallM);   // ซ้าย
-    Add(gCube, T(vec3(cx, ROOM_H * 0.5f, ROOM_Z1 + 0.05f)) * S(vec3(sx, ROOM_H, 0.1f)), wallM);   // หน้า
+    Add(gCube, T(vec3(cx, ROOM_H * 0.5f, ROOM_Z0 - 0.05f)) * S(vec3(sx, ROOM_H, 0.1f)), wallM); // หลัง
+    Add(gCube, T(vec3(ROOM_X0 - 0.05f, ROOM_H * 0.5f, cz)) * S(vec3(0.1f, ROOM_H, sz)), wallM); // ซ้าย
+    Add(gCube, T(vec3(cx, ROOM_H * 0.5f, ROOM_Z1 + 0.05f)) * S(vec3(sx, ROOM_H, 0.1f)), wallM); // หน้า
     Add(gCube, T(vec3(cx, ROOM_H + 0.05f, cz)) * S(vec3(sx, 0.1f, sz)), Mat(vec3(0.55f), 0.0f, 4.0f)); // เพดาน
 
-    // ผนังขวามีช่องหน้าต่าง (แสงจันทร์ลอดเข้ามา -> เงาเป็นรูปกรอบหน้าต่าง)
+    // ผนังขวามีช่องหน้าต่าง
     const float wx = ROOM_X1 + 0.05f;
     auto wallPiece = [&](float y0, float y1, float z0, float z1)
     {
@@ -844,17 +795,17 @@ static void BuildRoom()
     skirt.Box(T(vec3(ROOM_X0 + 0.01f, 0.045f, cz)) * S(vec3(0.02f, 0.09f, sz)));
     AddBuilt(skirt, Mat(vec3(0.25f, 0.17f, 0.12f), 0.2f, 24.0f));
 
-    // โปสเตอร์ "FUTURE ME" บนผนังหลัง
+    // โปสเตอร์บนผนังหลัง
     const vec3 posterPos(-1.30f, 1.50f, ROOM_Z0);
     Add(gCube, T(posterPos + vec3(0.0f, 0.0f, 0.008f)) * S(vec3(0.60f, 0.83f, 0.016f)), Mat(vec3(0.05f), 0.5f, 64.0f));
     Add(gQuad, T(posterPos + vec3(0.0f, 0.0f, 0.0175f)) * S(vec3(0.55f, 0.78f, 1.0f)), Mat(vec3(1.0f), 0.35f, 64.0f, gTex.poster));
 
-    // ปฏิทินบนผนังซ้าย (ปี 2086 ถูกขีดฆ่าทุกวัน)
+    // ปฏิทินบนผนังซ้าย
     mat4 calM = T(vec3(ROOM_X0 + 0.006f, 1.45f, -0.80f)) * R(90.0f, Y_AXIS) * R(-4.0f, Z_AXIS);
     Add(gQuad, calM * S(vec3(0.36f, 0.48f, 1.0f)), Mat(vec3(1.0f), 0.05f, 8.0f, gTex.calendar));
     Add(gSphere, calM * T(vec3(0.0f, 0.26f, 0.0f)) * S(0.008f), Mat(vec3(0.6f), 0.8f, 64.0f));
 
-    // นาฬิกาแขวน (เข็มชี้ 23:59 = เวลาส่งงาน!)
+    // นาฬิกาแขวน
     const vec3 cc(-0.55f, 1.86f, ROOM_Z0 + 0.03f);
     Material face = Mat(vec3(1.0f), 0.2f, 32.0f, gTex.clock);
     Add(gQuad, T(cc) * S(vec3(0.30f, 0.30f, 1.0f)), face);
@@ -873,9 +824,9 @@ static void BuildRoom()
         Add(gCube, T(cc + vec3(0.0f, 0.0f, z)) * R(-angleDeg, Z_AXIS) * T(vec3(0.0f, len * 0.5f - 0.02f, 0.0f)) * S(vec3(wdt, len, 0.004f)),
             Mat(col, 0.3f, 32.0f), false);
     };
-    hand((11.0f + 59.0f / 60.0f) * 30.0f, 0.085f, 0.010f, vec3(0.05f), 0.006f);   // เข็มชั่วโมง
-    hand(59.0f * 6.0f, 0.120f, 0.007f, vec3(0.05f), 0.010f);                        // เข็มนาที
-    hand(45.0f * 6.0f, 0.125f, 0.003f, vec3(0.8f, 0.1f, 0.1f), 0.014f);             // เข็มวินาที
+    hand((11.0f + 59.0f / 60.0f) * 30.0f, 0.085f, 0.010f, vec3(0.05f), 0.006f); // เข็มชั่วโมง
+    hand(59.0f * 6.0f, 0.120f, 0.007f, vec3(0.05f), 0.010f); // เข็มนาที
+    hand(45.0f * 6.0f, 0.125f, 0.003f, vec3(0.8f, 0.1f, 0.1f), 0.014f); // เข็มวินาที
     Add(gSphere, T(cc + vec3(0.0f, 0.0f, 0.016f)) * S(0.008f), Mat(vec3(0.1f)), false);
 }
 
@@ -885,7 +836,7 @@ static void BuildRoom()
 static void BuildDesk()
 {
     Material wood = Mat(vec3(1.0f), 0.35f, 48.0f, gTex.wood);
-    Add(gCube, T(vec3(-0.05f, 0.73f, -1.24f)) * S(vec3(1.70f, 0.04f, 0.80f)), wood);                // ท็อปโต๊ะ
+    Add(gCube, T(vec3(-0.05f, 0.73f, -1.24f)) * S(vec3(1.70f, 0.04f, 0.80f)), wood); // ท็อปโต๊ะ
 
     // ตู้ลิ้นชักด้านซ้าย
     Add(gCube, T(vec3(-0.70f, 0.355f, -1.24f)) * S(vec3(0.40f, 0.71f, 0.76f)), Mat(vec3(0.8f), 0.25f, 32.0f, gTex.wood, vec2(0.6f, 1.0f)));
@@ -899,7 +850,7 @@ static void BuildDesk()
     AddBuilt(drawers, Mat(vec3(1.05f, 1.0f, 0.95f), 0.3f, 32.0f, gTex.wood, vec2(0.5f, 0.3f)));
     AddBuilt(handles, Mat(vec3(0.7f, 0.7f, 0.72f), 0.9f, 96.0f));
 
-    // ขาโต๊ะเหล็กด้านขวา + แผ่นบังด้านหลัง
+    // ขาโต๊ะ
     MeshBuilder legs;
     legs.Box(T(vec3(0.76f, 0.355f, -1.58f)) * S(vec3(0.04f, 0.71f, 0.04f)));
     legs.Box(T(vec3(0.76f, 0.355f, -0.90f)) * S(vec3(0.04f, 0.71f, 0.04f)));
@@ -908,29 +859,28 @@ static void BuildDesk()
     Add(gCube, T(vec3(0.12f, 0.48f, -1.60f)) * S(vec3(1.22f, 0.44f, 0.02f)), Mat(vec3(0.7f), 0.2f, 16.0f, gTex.wood, vec2(1.0f, 0.4f)));
 }
 
-// ------------------------------------------------------------------------------------
-//  คอมพิวเตอร์ : จอ + คีย์บอร์ด + เมาส์ + เคส
-// ------------------------------------------------------------------------------------
+
+//  คอมพิวเตอร์ (จอ + คีย์บอร์ด + เมาส์ + เคส)
 static void BuildComputer()
 {
     Material plastic = Mat(vec3(0.07f, 0.07f, 0.08f), 0.55f, 64.0f);
 
-    // ---- จอมอนิเตอร์ (หันเข้าหากล้องเล็กน้อย) ----
+    // จอ
     const mat4 Mmon = T(vec3(-0.08f, 0.75f, -1.36f)) * R(18.0f, Y_AXIS);
     MeshBuilder mon;
-    mon.Box(Mmon * T(vec3(0.0f, 0.01f, 0.0f)) * S(vec3(0.28f, 0.02f, 0.20f)));      // ฐาน
-    mon.Box(Mmon * T(vec3(0.0f, 0.19f, -0.045f)) * S(vec3(0.06f, 0.36f, 0.03f)));   // คอ
-    mon.Box(Mmon * T(vec3(0.0f, 0.405f, 0.0f)) * S(vec3(0.78f, 0.46f, 0.035f)));    // กรอบจอ
-    mon.Box(Mmon * T(vec3(0.0f, 0.38f, -0.035f)) * S(vec3(0.42f, 0.28f, 0.05f)));   // ด้านหลังจอ
+    mon.Box(Mmon * T(vec3(0.0f, 0.01f, 0.0f)) * S(vec3(0.28f, 0.02f, 0.20f))); // ฐาน
+    mon.Box(Mmon * T(vec3(0.0f, 0.19f, -0.045f)) * S(vec3(0.06f, 0.36f, 0.03f))); // คอ
+    mon.Box(Mmon * T(vec3(0.0f, 0.405f, 0.0f)) * S(vec3(0.78f, 0.46f, 0.035f))); // กรอบจอ
+    mon.Box(Mmon * T(vec3(0.0f, 0.38f, -0.035f)) * S(vec3(0.42f, 0.28f, 0.05f))); // ด้านหลังจอ
     AddBuilt(mon, plastic);
 
-    const float SW = 0.74f, SH = 0.416f;                                              // 16:9
+    const float SW = 0.74f, SH = 0.416f;                                             
     const mat4 Mscr = Mmon * T(vec3(0.0f, 0.405f, 0.0182f));
     Material screen = Mat(vec3(1.0f), 0.9f, 160.0f, gTex.screen);
     screen.emissiveTex = 3.2f;
     Add(gQuad, Mscr * S(vec3(SW, SH, 1.0f)), screen, false);
 
-    // cursor กะพริบ (ต่อท้าย prompt บรรทัดล่าง)
+    // cursor กะพริบ
     float cxl = (gPromptEndX + 7.5f) / SCREEN_TEX_W - 0.5f;
     float cyl = 0.5f - (gPromptY + 10.5f) / SCREEN_TEX_H;
     Material cursor = Mat(vec3(0.0f));
@@ -956,7 +906,7 @@ static void BuildComputer()
     note2.doubleSided = true;
     Add(gQuad, Mmon * T(vec3(0.335f, 0.64f, 0.0185f)) * R(9.0f, Z_AXIS) * S(vec3(0.10f, 0.10f, 1.0f)), note2);
 
-    // ---- คีย์บอร์ด ----
+    // คีย์บอร์ด
     const mat4 Mkb = T(vec3(-0.10f, 0.75f, -1.00f)) * R(3.0f, Y_AXIS);
     MeshBuilder kbBase, keys;
     kbBase.Box(Mkb * T(vec3(0.0f, 0.011f, 0.0f)) * S(vec3(0.44f, 0.022f, 0.15f)));
@@ -975,14 +925,14 @@ static void BuildComputer()
         else
         {
             keys.Box(Mkb * T(vec3(-0.17f, 0.027f, z)) * S(vec3(0.05f, 0.012f, 0.022f)));
-            keys.Box(Mkb * T(vec3(-0.01f, 0.027f, z)) * S(vec3(0.20f, 0.012f, 0.022f)));    // spacebar
+            keys.Box(Mkb * T(vec3(-0.01f, 0.027f, z)) * S(vec3(0.20f, 0.012f, 0.022f))); // spacebar
             keys.Box(Mkb * T(vec3(0.16f, 0.027f, z)) * S(vec3(0.07f, 0.012f, 0.022f)));
         }
     }
     AddBuilt(kbBase, Mat(vec3(0.05f), 0.4f, 48.0f));
     AddBuilt(keys, Mat(vec3(0.20f, 0.20f, 0.22f), 0.35f, 48.0f));
 
-    // ---- แผ่นรองเมาส์ + เมาส์ ----
+    // แผ่นรองเมาส์ + เมาส์
     Add(gCube, T(vec3(0.34f, 0.7515f, -1.03f)) * R(-6.0f, Y_AXIS) * S(vec3(0.25f, 0.003f, 0.21f)), Mat(vec3(0.08f, 0.09f, 0.14f), 0.1f, 8.0f));
     MeshBuilder mouse;
     mouse.Sphere(T(vec3(0.34f, 0.755f, -1.00f)) * R(-10.0f, Y_AXIS) * S(vec3(0.031f, 0.020f, 0.052f)));
@@ -991,7 +941,7 @@ static void BuildComputer()
     mouse.Tube(cable, std::vector<float>(cable.size(), 0.0025f), 6, false);
     AddBuilt(mouse, Mat(vec3(0.10f), 0.7f, 64.0f));
 
-    // ---- เคสคอม (วางพื้นข้างโต๊ะ) ----
+    // เคสคอม
     const mat4 Mpc = T(vec3(1.06f, 0.0f, -1.28f)) * R(-8.0f, Y_AXIS);
     MeshBuilder pc, vents;
     pc.Box(Mpc * T(vec3(0.0f, 0.24f, 0.0f)) * S(vec3(0.21f, 0.45f, 0.46f)));
@@ -1018,7 +968,7 @@ static void BuildComputer()
     AddBuilt(cables, Mat(vec3(0.03f), 0.4f, 32.0f));
 }
 
-// กล่องขอบมน : กล่อง 3 ชิ้นไขว้กัน + ทรงกระบอก 12 ขอบ + ทรงกลม 8 มุม
+// กล่องขอบมน
 static void RoundedBox(MeshBuilder& mb, const mat4& M, const vec3& size, float r)
 {
     const vec3 h = size * 0.5f - vec3(r);
@@ -1037,9 +987,7 @@ static void RoundedBox(MeshBuilder& mb, const mat4& M, const vec3& size, float r
     }
 }
 
-// ------------------------------------------------------------------------------------
-//  เก้าอี้สำนักงาน
-// ------------------------------------------------------------------------------------
+//  เก้าอี้
 static void BuildChair()
 {
     const mat4 Mch = T(vec3(-0.05f, 0.0f, -0.46f)) * R(-15.0f, Y_AXIS);
@@ -1058,11 +1006,11 @@ static void BuildChair()
     metal.Cylinder(xform(Mch, vec3(0.0f, 0.27f, 0.0f)), xform(Mch, vec3(0.0f, 0.41f, 0.0f)), 0.022f, 0.022f, 12);
     metal.Box(Mch * T(vec3(0.0f, 0.39f, 0.02f)) * S(vec3(0.22f, 0.04f, 0.24f)));
 
-    RoundedBox(fabric, Mch * T(vec3(0.0f, 0.44f, 0.0f)), vec3(0.50f, 0.08f, 0.48f), 0.03f);                                       // เบาะ
-    RoundedBox(fabric, Mch * T(vec3(0.0f, 0.50f, 0.255f)) * R(12.0f, X_AXIS) * T(vec3(0.0f, 0.30f, 0.0f)), vec3(0.46f, 0.44f, 0.06f), 0.028f);   // พนักพิง
+    RoundedBox(fabric, Mch * T(vec3(0.0f, 0.44f, 0.0f)), vec3(0.50f, 0.08f, 0.48f), 0.03f); // เบาะ
+    RoundedBox(fabric, Mch * T(vec3(0.0f, 0.50f, 0.255f)) * R(12.0f, X_AXIS) * T(vec3(0.0f, 0.30f, 0.0f)), vec3(0.46f, 0.44f, 0.06f), 0.028f); // พนักพิง
     metal.Box(Mch * T(vec3(0.0f, 0.43f, 0.26f)) * R(12.0f, X_AXIS) * T(vec3(0.0f, 0.06f, 0.0f)) * S(vec3(0.07f, 0.20f, 0.025f)));
 
-    for (int s = -1; s <= 1; s += 2)                                                                              // ที่วางแขน
+    for (int s = -1; s <= 1; s += 2) // ที่วางแขน
     {
         metal.Box(Mch * T(vec3(s * 0.265f, 0.55f, 0.05f)) * S(vec3(0.03f, 0.20f, 0.04f)));
         RoundedBox(plastic, Mch * T(vec3(s * 0.265f, 0.66f, 0.0f)), vec3(0.07f, 0.03f, 0.27f), 0.012f);
@@ -1074,13 +1022,8 @@ static void BuildChair()
     AddBuilt(fabric, Mat(vec3(1.0f), 0.05f, 8.0f, gTex.fabric, vec2(3.0f)));
 }
 
-// ------------------------------------------------------------------------------------
-//  โครงกระดูก "FUTURE ME"
-// ------------------------------------------------------------------------------------
+//  โครงกระดูก
 static void BuildSkeleton(){
-
-    // โหลดโมเดลกระดูกจากไฟล์ OBJ ในโฟลเดอร์ Models
-    // เปลี่ยนชื่อ "skeleton.obj" ตรงนี้ได้ หากไฟล์ของคุณใช้ชื่ออื่น
     std::filesystem::path modelPath;
     std::filesystem::path folder = std::filesystem::current_path();
     for (int i = 0; i < 6; ++i)
@@ -1105,28 +1048,17 @@ static void BuildSkeleton(){
         return;
     }
 
-    // ตำแหน่งข้างโต๊ะคอม: ปรับค่า scale/ตำแหน่งได้ตามขนาดโมเดลที่ export จาก Blender
     const vec3 skeletonPosition(-0.05f, -0.12f, -0.50f);
     const float skeletonScale = 0.04f;
     const mat4 skeletonModel = T(skeletonPosition) * R(-185.0f, Y_AXIS) * S(skeletonScale);
     Add(Keep(skeleton), skeletonModel, Mat(vec3(0.84f, 0.80f, 0.68f), 0.30f, 28.0f));
 
-    // จุดอ้างอิงของฉากที่ส่วนใยแมงมุม/เอฟเฟกต์อื่นใช้อยู่
-    // ตั้งให้สอดคล้องกับตำแหน่งโดยประมาณของโมเดลยืน
-    gScene.skullCentre = skeletonPosition + vec3(0.0f, 0.78f * skeletonScale, 0.0f);
-    gScene.rShoulder   = skeletonPosition + vec3(0.12f * skeletonScale, 0.58f * skeletonScale, 0.0f);
-    gScene.lElbow      = skeletonPosition + vec3(-0.18f * skeletonScale, 0.42f * skeletonScale, 0.0f);
-    gScene.rElbow      = skeletonPosition + vec3(0.18f * skeletonScale, 0.42f * skeletonScale, 0.0f);
-    gScene.rKnee       = skeletonPosition + vec3(0.08f * skeletonScale, 0.22f * skeletonScale, 0.0f);
-    gScene.lKnee       = skeletonPosition + vec3(-0.08f * skeletonScale, 0.22f * skeletonScale, 0.0f);
 }
 
-// ------------------------------------------------------------------------------------
-//  ของบนโต๊ะ : แก้วกาแฟขึ้นรา, กระป๋องเครื่องดื่ม, ต้นไม้ตาย, กองกระดาษ, เป็ดยาง (rubber duck debugging)
-// ------------------------------------------------------------------------------------
+//  ของบนโต๊ะ
 static void BuildProps()
 {
-    // ---- แก้วกาแฟ ----
+    // แก้วกาแฟ
     const vec3 mugPos(0.55f, 0.75f, -1.16f);
     MeshBuilder mug;
     mug.Lathe({ {0.0f, 0.0f}, {0.036f, 0.0f}, {0.039f, 0.004f}, {0.040f, 0.020f}, {0.040f, 0.090f}, {0.038f, 0.095f},
@@ -1144,7 +1076,7 @@ static void BuildProps()
     AddBuilt(mold, Mat(vec3(0.20f, 0.24f, 0.12f), 0.05f, 8.0f));
     gScene.mug = mugPos + vec3(0.0f, 0.095f, 0.0f);
 
-    // ---- กระป๋องเครื่องดื่มชูกำลัง ----
+    // กระป๋องเครื่องดื่มชูกำลัง
     MeshBuilder cans;
     const std::vector<vec2> canProf = { {0.0f, 0.0f}, {0.026f, 0.0f}, {0.033f, 0.008f}, {0.033f, 0.112f}, {0.027f, 0.122f}, {0.0f, 0.122f} };
     cans.Lathe(canProf, T(vec3(0.64f, 0.75f, -1.50f)) * R(30.0f, Y_AXIS), 24);
@@ -1156,7 +1088,7 @@ static void BuildProps()
     cans.Lathe(canProf, T(vec3(0.95f, 0.0f, -0.25f)) * R(150.0f, Y_AXIS), 24);
     AddBuilt(cans, Mat(vec3(1.0f), 0.8f, 96.0f, gTex.can));
 
-    // ---- ต้นไม้ที่ตายไปนานแล้ว ----
+    // ต้นไม้ตาย
     const vec3 potPos(-0.70f, 0.75f, -1.46f);
     MeshBuilder pot, soil, stems, leaves;
     pot.Lathe({ {0.0f, 0.0f}, {0.050f, 0.0f}, {0.064f, 0.110f}, {0.072f, 0.114f}, {0.072f, 0.130f}, {0.064f, 0.130f}, {0.058f, 0.110f} }, T(potPos), 28);
@@ -1176,7 +1108,7 @@ static void BuildProps()
         vec3 mid = stem[3];
         leaves.Sphere(T(mid + vec3(0.0f, -0.01f, 0.0f)) * R(glm::degrees(-a) + 40.0f, Y_AXIS) * R(55.0f, Z_AXIS) * S(vec3(0.018f, 0.004f, 0.011f)), 10, 6);
     }
-    for (int k = 0; k < 4; ++k)                                     // ใบไม้แห้งที่ร่วงบนโต๊ะ
+    for (int k = 0; k < 4; ++k) // ใบไม้แห้งที่ร่วงบนโต๊ะ
         leaves.Sphere(T(potPos + vec3(0.06f + 0.05f * k, 0.002f, 0.08f + 0.03f * Hash2(k, 7, 1))) * R(k * 47.0f, Y_AXIS) *
                       S(vec3(0.018f, 0.002f, 0.011f)), 10, 6);
     AddBuilt(pot, Mat(vec3(0.62f, 0.33f, 0.21f), 0.1f, 12.0f));
@@ -1184,7 +1116,7 @@ static void BuildProps()
     AddBuilt(stems, Mat(vec3(0.35f, 0.26f, 0.15f), 0.05f, 8.0f));
     AddBuilt(leaves, Mat(vec3(0.50f, 0.36f, 0.16f), 0.05f, 8.0f));
 
-    // ---- กองกระดาษ / กระดาษขยำ ----
+    // กองกระดาษ
     MeshBuilder papers;
     for (int i = 0; i < 7; ++i)
         papers.Box(T(vec3(-0.47f + 0.012f * (Hash2(i, 2, 9) - 0.5f), 0.752f + 0.0028f * i, -1.10f + 0.012f * (Hash2(i, 5, 9) - 0.5f))) *
@@ -1198,7 +1130,7 @@ static void BuildProps()
     }
     AddBuilt(papers, Mat(vec3(1.0f), 0.05f, 8.0f, gTex.paper));
 
-    // ---- เป็ดยางเพื่อนดีบัก ----
+    // เป็ดยาง
     const mat4 Md = T(vec3(0.42f, 0.75f, -1.52f)) * R(25.0f, Y_AXIS);
     MeshBuilder duck, beak, eyes;
     duck.Sphere(Md * T(vec3(0.0f, 0.036f, 0.0f)) * S(vec3(0.045f, 0.036f, 0.056f)));
@@ -1211,9 +1143,7 @@ static void BuildProps()
     AddBuilt(eyes, Mat(vec3(0.02f), 0.9f, 128.0f));
 }
 
-// ------------------------------------------------------------------------------------
-//  ใยแมงมุม (เส้นบางมาก + โปร่งแสง)
-// ------------------------------------------------------------------------------------
+//  ใยแมงมุม
 static void Cobweb(MeshBuilder& mb, const vec3& centre, const std::vector<vec3>& anchors, bool closed, int rings, int seed)
 {
     const float r = 0.0010f;
@@ -1248,33 +1178,30 @@ static void BuildCobwebs()
 {
     MeshBuilder web;
     const vec3 sk = gScene.skullCentre;
-
-    // หัวกะโหลก <-> ไหล่ขวา
     {
         vec3 c = lerp3(sk, gScene.rShoulder, 0.5f) + vec3(0.03f, 0.0f, 0.02f);
         Cobweb(web, c, { sk + vec3(0.06f, 0.03f, 0.0f), sk + vec3(0.07f, -0.04f, 0.03f), gScene.rShoulder + vec3(0.0f, 0.02f, 0.0f),
                          lerp3(gScene.rShoulder, gScene.rElbow, 0.3f), gScene.rShoulder + vec3(0.04f, 0.05f, 0.05f) }, true, 7, 1);
     }
-    // ข้อศอกขวา <-> ที่วางแขนเก้าอี้
     {
         vec3 c = lerp3(gScene.rElbow, gScene.armrestR, 0.5f);
         Cobweb(web, c, { gScene.rElbow, lerp3(gScene.rElbow, gScene.rShoulder, 0.25f), gScene.armrestR + vec3(0.0f, 0.0f, 0.10f),
                          gScene.armrestR, gScene.armrestR + vec3(0.0f, 0.0f, -0.12f) }, true, 6, 2);
     }
-    // มุมห้อง (ผนังซ้าย/ผนังหลัง)
+    // มุมห้อง
     {
         vec3 c(ROOM_X0 + 0.12f, 1.10f, ROOM_Z0 + 0.12f);
         Cobweb(web, c, { vec3(ROOM_X0, 1.55f, ROOM_Z0 + 0.35f), vec3(ROOM_X0, 1.30f, ROOM_Z0 + 0.55f), vec3(ROOM_X0, 0.80f, ROOM_Z0 + 0.45f),
                          vec3(ROOM_X0 + 0.40f, 0.75f, ROOM_Z0), vec3(ROOM_X0 + 0.55f, 1.25f, ROOM_Z0), vec3(ROOM_X0 + 0.30f, 1.60f, ROOM_Z0) }, false, 9, 3);
     }
-    // มุมจอ <-> ผนัง
+    // มุมจอ
     {
         vec3 a = gScene.monitorTopRight;
         vec3 c = a + vec3(0.12f, 0.10f, -0.12f);
         Cobweb(web, c, { a, a + vec3(0.0f, -0.20f, 0.0f), vec3(a.x + 0.25f, 0.752f, ROOM_Z0 + 0.10f), vec3(a.x + 0.35f, a.y + 0.05f, ROOM_Z0),
                          vec3(a.x + 0.10f, a.y + 0.30f, ROOM_Z0) }, false, 7, 4);
     }
-    {   // แมงมุมตัวเล็กเฝ้าใย
+    { // แมงมุมตัวเล็กเฝ้าใย
         vec3 c = gScene.monitorTopRight + vec3(0.12f, 0.10f, -0.12f) + vec3(0.0f, -0.012f, 0.0f);
         MeshBuilder spider;
         spider.Sphere(T(c) * S(vec3(0.011f, 0.009f, 0.013f)), 12, 8);
@@ -1289,13 +1216,13 @@ static void BuildCobwebs()
             }
         AddBuilt(spider, Mat(vec3(0.03f), 0.6f, 64.0f), false);
     }
-    // แก้วกาแฟ <-> กระป๋อง
+    // แก้วกาแฟ กระป๋อง
     {
         vec3 m = gScene.mug;
         vec3 c = m + vec3(0.04f, 0.03f, -0.10f);
         Cobweb(web, c, { m + vec3(0.0f, 0.0f, -0.035f), vec3(0.63f, 0.87f, -1.37f), vec3(0.715f, 0.85f, -1.42f), vec3(0.68f, 0.751f, -1.25f) }, true, 5, 5);
     }
-    // หน้าแข้ง <-> ขาเก้าอี้ / พื้น
+    // เก้าอี้ / พื้น
     {
         vec3 k = gScene.rKnee;
         vec3 c = vec3(k.x + 0.05f, 0.25f, k.z + 0.18f);
@@ -1310,9 +1237,7 @@ static void BuildCobwebs()
     AddBuilt(web, webM, false);
 }
 
-// ------------------------------------------------------------------------------------
-//  Rendering
-// ------------------------------------------------------------------------------------
+// Rendering
 #define MAX_POINT_LIGHTS 4
 
 struct SceneUniforms
@@ -1410,10 +1335,8 @@ static bool SaveScreenshot(GLuint fbo)
     return ok;
 }
 
-// ------------------------------------------------------------------------------------
-//  Camera
-// ------------------------------------------------------------------------------------
-const vec3 SHOT_EYE(1.30f, 1.38f, 0.40f);       // มุมกล้องหลักของภาพ
+// Camera
+const vec3 SHOT_EYE(1.30f, 1.38f, 0.40f); // มุมกล้องหลักของภาพ
 const vec3 SHOT_TARGET(-0.20f, 0.95f, -0.95f);
 const float FOV_DEG = 45.0f;
 
@@ -1436,9 +1359,7 @@ struct Camera
     }
 };
 
-// ------------------------------------------------------------------------------------
-//  main
-// ------------------------------------------------------------------------------------
+// main
 int main()
 {
     Window mainWindow(WIDTH, HEIGHT, 3, 3);
@@ -1447,7 +1368,7 @@ int main()
     glfwSetWindowTitle(win, "FUTURE ME  |  P = save image   RMB+mouse = look   WASD/QE = move   R = reset");
     std::cout << "OpenGL " << glGetString(GL_VERSION) << " | " << glGetString(GL_RENDERER) << "\n";
 
-    // ---- shaders ----
+    // shaders
     Shader sceneShader, shadowShader;
     sceneShader.CreateFromFiles(shaderDirectory / "futureme_scene.vert", shaderDirectory / "futureme_scene.frag");
     shadowShader.CreateFromFiles(shaderDirectory / "futureme_shadow.vert", shaderDirectory / "futureme_shadow.frag");
@@ -1460,7 +1381,7 @@ int main()
         return 1;
     }
 
-    // ---- textures ----
+    // textures
     gTex.white    = MakeWhiteTexture();
     gTex.wood     = MakeWoodTexture();
     gTex.floor    = MakeFloorTexture();
@@ -1475,12 +1396,12 @@ int main()
     gTex.sticky1  = MakeStickyTexture(vec3(1.0f, 0.92f, 0.35f), { "DEADLINE", "19 OCT", "2026" }, 3);
     gTex.sticky2  = MakeStickyTexture(vec3(1.0f, 0.55f, 0.70f), { "JUST ONE", "MORE", "RUN..." }, 3);
 
-    // ---- base meshes ----
+    // base meshes
     { MeshBuilder b; b.Box(mat4(1.0f));    gCube   = Keep(b.Build()); }
     { MeshBuilder b; b.Sphere(mat4(1.0f), 24, 16); gSphere = Keep(b.Build()); }
     { MeshBuilder b; b.Quad(mat4(1.0f));   gQuad   = Keep(b.Build()); }
 
-    // ---- build the scene ----
+    // build the scene
     BuildRoom();
     BuildDesk();
     BuildComputer();
@@ -1492,7 +1413,7 @@ int main()
     for (Mesh* m : gMeshes) triCount += m->GetIndexCount() / 3;
     std::cout << "Scene: " << gItems.size() << " draw items, " << triCount << " unique triangles\n";
 
-    // ---- shadow map FBO ----
+    // shadow map
     GLuint shadowFBO = 0, shadowTex = 0;
     glGenTextures(1, &shadowTex);
     glBindTexture(GL_TEXTURE_2D, shadowTex);
@@ -1510,14 +1431,12 @@ int main()
     glReadBuffer(GL_NONE);
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) std::cerr << "Shadow FBO incomplete\n";
 
-    // ---- MSAA FBO (800x600) + resolve FBO (ใช้ทั้งแสดงผลและบันทึกภาพ) ----
     GLint maxSamples = 1;
     glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
     const int samples = std::max(1, std::min(4, (int)maxSamples));
     GLuint msFBO = 0, msColor = 0, msDepth = 0, resolveFBO = 0, resolveColor = 0;
     glGenFramebuffers(1, &msFBO);
     glBindFramebuffer(GL_FRAMEBUFFER, msFBO);
-    // ระบุ color attachment ให้ชัดเจน เพื่อให้การ render และ blit ทำงานเหมือนกันทุกไดรเวอร์
     glDrawBuffer(GL_COLOR_ATTACHMENT0);
     glReadBuffer(GL_COLOR_ATTACHMENT0);
     glGenRenderbuffers(1, &msColor);
@@ -1549,14 +1468,13 @@ int main()
     }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-    // ---- lights ----
+    // lights
     const vec3 moonDir = glm::normalize(vec3(-1.0f, -0.32f, -0.30f));
     const vec3 moonColour = vec3(0.50f, 0.62f, 1.0f) * 1.45f;
     const vec3 lightCentre(0.2f, 1.2f, 0.6f);
     const mat4 lightView = glm::lookAt(lightCentre - moonDir * 6.0f, lightCentre, Y_AXIS);
     const mat4 lightProj = glm::ortho(-3.6f, 3.6f, -3.2f, 3.2f, 0.5f, 14.0f);
     const mat4 lightSpace = lightProj * lightView;
-
     const mat4 projection = glm::perspective(glm::radians(FOV_DEG), (float)WIDTH / (float)HEIGHT, 0.05f, 30.0f);
 
     Camera cam;
@@ -1572,7 +1490,7 @@ int main()
         lastTime = now;
         glfwPollEvents();
 
-        // ---------------- input ----------------
+        // input
         if (glfwGetKey(win, GLFW_KEY_ESCAPE) == GLFW_PRESS) glfwSetWindowShouldClose(win, GLFW_TRUE);
         if (glfwGetKey(win, GLFW_KEY_R) == GLFW_PRESS) cam.LookAt(SHOT_EYE, SHOT_TARGET);
         double mx, my;
@@ -1600,7 +1518,6 @@ int main()
 
         const mat4 view = glm::lookAt(cam.pos, cam.pos + front, Y_AXIS);
 
-        // ---------------- pass 1 : shadow map ----------------
         glBindFramebuffer(GL_FRAMEBUFFER, shadowFBO);
         glViewport(0, 0, SHADOW_SIZE, SHADOW_SIZE);
         glEnable(GL_DEPTH_TEST);
@@ -1612,11 +1529,9 @@ int main()
         DrawShadowCasters(shModel);
         glDisable(GL_POLYGON_OFFSET_FILL);
 
-        // ---------------- pass 2 : scene (MSAA) ----------------
         glBindFramebuffer(GL_FRAMEBUFFER, msFBO);
         glDrawBuffer(GL_COLOR_ATTACHMENT0);
         glViewport(0, 0, WIDTH, HEIGHT);
-        // Reset render state in case a previous pass or driver left it changed.
         glDisable(GL_SCISSOR_TEST);
         glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
         glDepthMask(GL_TRUE);
@@ -1638,7 +1553,7 @@ int main()
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, shadowTex);
 
-        // แสงจากจอ (กะพริบเบาๆ) + ไฟ LED เคส
+        // แสงจากจอ
         float flicker = 1.0f + 0.05f * std::sin(now * 23.0f) * std::sin(now * 3.1f);
         const PointLight lights[2] = {
             { gScene.screenCentre + gScene.screenNormal * 0.18f, vec3(1.0f, 0.22f, 0.18f) * 2.6f * flicker, gScene.screenNormal, vec3(1.0f, 0.6f, 1.6f) },
@@ -1655,15 +1570,15 @@ int main()
         bool cursorOn = std::fmod(now, 1.0f) < 0.55f;
         glDisable(GL_BLEND);
         glDepthMask(GL_TRUE);
-        DrawScene(su, false, cursorOn);                 // วัตถุทึบ
+        DrawScene(su, false, cursorOn); // วัตถุทึบ
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         glDepthMask(GL_FALSE);
-        DrawScene(su, true, cursorOn);                  // ใยแมงมุม (โปร่งแสง)
+        DrawScene(su, true, cursorOn); // ใยแมงมุม
         glDepthMask(GL_TRUE);
         glDisable(GL_BLEND);
 
-        // ---------------- resolve MSAA -> แสดงบนหน้าต่าง ----------------
+        // แสดงบนหน้าต่าง
         glBindFramebuffer(GL_READ_FRAMEBUFFER, msFBO);
         glReadBuffer(GL_COLOR_ATTACHMENT0);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, resolveFBO);
@@ -1687,7 +1602,7 @@ int main()
         mainWindow.swapBuffers();
     }
 
-    // ---- cleanup ----
+    // cleanup
     for (Mesh* m : gMeshes) delete m;
     gMeshes.clear();
     gItems.clear();

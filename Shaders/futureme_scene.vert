@@ -1,8 +1,5 @@
 #version 330 core
-// ---------------------------------------------------------------
-//  FUTURE ME : vertex shader หลักของฉาก
-//  layout ตรงกับ Mesh.cpp ของ starter  (0 = pos, 1 = uv, 2 = normal)
-// ---------------------------------------------------------------
+// vertex shader หลักของฉาก
 layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec2 aUV;
 layout (location = 2) in vec3 aNormal;

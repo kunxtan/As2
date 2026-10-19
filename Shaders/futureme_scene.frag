@@ -1,12 +1,4 @@
 #version 330 core
-// ---------------------------------------------------------------
-//  FUTURE ME : fragment shader (Lighting model = Blinn-Phong)
-//    - Ambient แบบ hemisphere (ฟ้า/พื้น)
-//    - Directional light = แสงจันทร์ลอดหน้าต่าง + Shadow mapping (PCF)
-//    - Point lights  = แสงสีแดงจากจอที่ขึ้น error, ไฟ LED เคส ฯลฯ
-//    - Emissive      = จอคอม / ไฟ LED เรืองแสงเอง
-//    - Tone mapping + gamma + vignette
-// ---------------------------------------------------------------
 in vec3 vWorldPos;
 in vec3 vNormal;
 in vec2 vUV;
@@ -14,37 +6,37 @@ in vec4 vLightSpacePos;
 
 out vec4 FragColor;
 
-// ---------- material ----------
-uniform sampler2D albedoTex;     // ถ้าวัตถุไม่มี texture จะผูก texture สีขาว 1 พิกเซลไว้
-uniform vec3  albedo;          // สี (sRGB)
+// material
+uniform sampler2D albedoTex;
+uniform vec3  albedo;          // สี
 uniform float alpha;
 uniform float specStrength;
 uniform float shininess;
-uniform vec3  emissive;        // แสงที่วัตถุปล่อยเอง (sRGB)
+uniform vec3  emissive;        // แสงที่วัตถุปล่อยเอง
 uniform float emissiveTex;     // > 0 = ให้ texture เรืองแสง (เช่นหน้าจอ)
 uniform bool  doubleSided;     // วัตถุบางๆ ที่มองได้สองด้าน (ใยแมงมุม, โพสต์อิท)
 
-// ---------- camera ----------
+// camera
 uniform vec3 viewPos;
 
-// ---------- ambient ----------
+// ambient
 uniform vec3 ambientSky;
 uniform vec3 ambientGround;
 
-// ---------- directional light (moon) ----------
+// directional light (moon)
 uniform vec3 moonDir;          // ทิศที่แสงเดินทาง
 uniform vec3 moonColor;
 uniform sampler2D shadowMap;
 
-// ---------- point lights ----------
+// point lights
 #define MAX_POINT_LIGHTS 4
 uniform int  numPointLights;
 uniform vec3 pointPos[MAX_POINT_LIGHTS];
 uniform vec3 pointColor[MAX_POINT_LIGHTS];
-uniform vec3 pointDir[MAX_POINT_LIGHTS];   // (0,0,0) = ส่องรอบทิศ, อื่นๆ = ส่องครึ่งทรงกลมไปด้านหน้า (เหมือนจอ)
+uniform vec3 pointDir[MAX_POINT_LIGHTS];
 uniform vec3 pointAtt[MAX_POINT_LIGHTS];   // (constant, linear, quadratic)
 
-// ---------- post ----------
+// post
 uniform vec2  resolution;
 uniform float exposure;
 
@@ -78,7 +70,7 @@ vec3 ACESFilm(vec3 x)
 void main()
 {
     vec4 texel = texture(albedoTex, vUV);
-    if (texel.a < 0.1) discard;               // alpha test (เช่น หน้าปัดนาฬิกาทรงกลม)
+    if (texel.a < 0.1) discard;               
     vec3 base  = toLinear(albedo) * toLinear(texel.rgb);
     float a    = alpha * texel.a;
 
@@ -86,10 +78,10 @@ void main()
     vec3 V = normalize(viewPos - vWorldPos);
     if (doubleSided && dot(N, V) < 0.0) N = -N;
 
-    // ---- ambient ----
+    // ambient
     vec3 colour = base * mix(toLinear(ambientGround), toLinear(ambientSky), N.y * 0.5 + 0.5);
 
-    // ---- moon light (directional + shadow) ----
+    // moon light
     vec3 L = normalize(-moonDir);
     float NdotL = max(dot(N, L), 0.0);
     if (NdotL > 0.0)
@@ -100,7 +92,7 @@ void main()
         colour += (base * NdotL + vec3(spec) * NdotL) * moonColor * (1.0 - shadow);
     }
 
-    // ---- point lights (Blinn-Phong + attenuation) ----
+    // point lights
     for (int i = 0; i < numPointLights; ++i)
     {
         vec3  Lv   = pointPos[i] - vWorldPos;
@@ -118,14 +110,14 @@ void main()
         colour += (base * diff + vec3(spec) * diff) * pointColor[i] * att * lobe;
     }
 
-    // ---- emissive ----
+    // emissive 
     colour += toLinear(emissive) + base * emissiveTex;
 
-    // ---- tone mapping + gamma ----
+    // tone mapping + gamma
     colour = ACESFilm(colour * exposure);
     colour = pow(colour, vec3(1.0 / 2.2));
 
-    // ---- vignette ----
+    // vignette
     vec2 uv = gl_FragCoord.xy / resolution;
     float vig = smoothstep(0.85, 0.30, length(uv - 0.5));
     colour *= mix(0.45, 1.0, vig);
