@@ -37,7 +37,7 @@ const GLint HEIGHT = 600;
 const int   SHADOW_SIZE = 2048;
 const float PI = 3.14159265358979f;
 
-const char* SCREENSHOT_NAME = "Assignment2_67050592.png";
+const char* SCREENSHOT_NAME = "Assignment2_67051052_67050592.png";
 
 const std::filesystem::path shaderDirectory =
     std::filesystem::u8path(OPENGL_STARTER_SHADER_DIR);
